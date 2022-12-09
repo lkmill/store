@@ -1,0 +1,51 @@
+{
+  "name": "@bmp/store",
+  "version": "0.0.1",
+  "description": "Dead simple centralized state container (store) with preact and react bindings.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./devtools": "./src/devtools.js",
+    "./preact": "./src/preact.js"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "eslint --ext .cjs,.js,.jsx,.mjs .",
+    "prepare": "husky install",
+    "prepublishOnly": "npm run clean && npm run lint && npm run test && npm run build",
+    "release": "npm t && git commit -am $npm_package_version && git tag $npm_package_version && git push && git push --tags && npm publish",
+    "size": "strip-json-comments --no-whitespace dist/unistore.js | gzip-size && bundlesize",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lohfu/store.git"
+  },
+  "keywords": [
+    "preact",
+    "component",
+    "state machine",
+    "redux"
+  ],
+  "author": "Linus Miller <lohfu@lohfu.io> (https://lohfu.io/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/lohfu/store/issues"
+  },
+  "homepage": "https://github.com/lohfu/store#readme",
+  "devDependencies": {
+    "@testing-library/preact": "^3.2.2",
+    "eslint": "^8.29.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-config-standard": "^17.0.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-n": "^15.6.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "husky": "^8.0.2",
+    "jest": "^29.3.1",
+    "jest-environment-jsdom": "^29.3.1",
+    "lint-staged": "^13.1.0",
+    "preact": "^10.11.3",
+    "prettier": "^2.8.1"
+  }
+}

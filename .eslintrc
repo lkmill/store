@@ -1,0 +1,22 @@
+{
+  "root": true,
+
+  "extends": ["standard", "prettier"],
+
+  "env": {
+    "browser": true
+  },
+
+  "rules": {
+    "comma-dangle": [2, "always-multiline"]
+  },
+
+  "overrides": [
+    {
+      "files": ["test/**/*"],
+      "env": {
+        "jest": true
+      }
+    }
+  ]
+}
