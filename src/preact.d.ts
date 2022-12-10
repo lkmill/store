@@ -3,22 +3,24 @@
 // K - Store state
 // I - Injected props to wrapped component
 
-declare module 'unistore/preact' {
+declare module '@bmp/store/preact' {
   import * as Preact from 'preact'
-  import { ActionCreator, StateMapper, Store } from 'unistore'
+  import { StateMapper, Store, ActionCreatorMap, WrappedActionCreatorMap } from '@bmp/store'
 
-  export function connect<T, S, K, I>(
-    mapStateToProps: string | Array<string> | StateMapper<T, K, I>,
-    actions?: ActionCreator<K> | object,
+  export function useStore<K, E>(): Store<K, E>
+
+  export function connect<T, S, K, I, A extends ActionCreatorMap<K, E>, E = any>(
+    mapStateToProps: string | Array<string> | StateMapper<T, K, I> | null,
+    actions?: A,
   ): (
-    Child: Preact.ComponentConstructor<T & I, S> | Preact.AnyComponent<T & I, S>,
+    Child:
+      | Preact.ComponentConstructor<T & I & WrappedActionCreatorMap<A>, S>
+      | Preact.AnyComponent<T & I & WrappedActionCreatorMap<A>, S>,
   ) => Preact.ComponentConstructor<T | (T & I), S>
 
-  export interface ProviderProps<T> {
-    store: Store<T>
+  export interface ProviderProps<K, E> {
+    store: Store<K, E>
   }
 
-  export class Provider<T> extends Preact.Component<ProviderProps<T>> {
-    render(props: ProviderProps<T>): Preact.JSX.Element
-  }
+  export const Provider: Preact.FunctionComponent<ProviderProps<K, E>>
 }

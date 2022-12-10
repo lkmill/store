@@ -1,10 +1,10 @@
-import { h, render } from 'preact'
+import { jest } from '@jest/globals'
+import { h } from 'preact'
+import { act, render } from '@testing-library/preact'
 import createStore from '../src/index.js'
-import { Provider, connect } from '../src/preact.js'
+import { Provider, connect, useStore } from '../src/preact.js'
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-const NO_CHILDREN = global.IS_PREACT_8 ? expect.anything() : undefined
+const NO_CHILDREN = undefined
 
 describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
   describe('<Provider>', () => {
@@ -12,27 +12,22 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       render(null, document.body)
     })
 
-    it('should provide props into context', () => {
-      const Child = jest.fn()
+    it('should provide the store in context', () => {
+      let context
 
-      render(
-        <Provider store='a'>
-          <Child />
-        </Provider>,
-        document.body,
-      )
-      expect(Child).toHaveBeenCalledWith(expect.anything(), { store: 'a' })
+      const Child = () => {
+        context = useStore()
+        return null
+      }
+
+      render(h(Provider, { store: 'a' }, h(Child)), document.body)
+      expect(context).toBe('a')
 
       render(null, document.body)
 
-      let store = { name: 'obj' }
-      render(
-        <Provider store={store}>
-          <Child />
-        </Provider>,
-        document.body,
-      )
-      expect(Child).toHaveBeenCalledWith(expect.anything(), { store })
+      const store = { name: 'obj' }
+      render(h(Provider, { store }, h(Child)), document.body)
+      expect(context).toBe(store)
     })
   })
 
@@ -42,31 +37,21 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
     })
 
     it('should pass mapped state as props', () => {
-      let state = { a: 'b' }
+      const state = { a: 'b' }
       const store = { subscribe: jest.fn(), unsubscribe: jest.fn(), getState: () => state }
       const Child = jest.fn()
       const ConnectedChild = connect(Object)(Child)
-      render(
-        <Provider store={store}>
-          <ConnectedChild />
-        </Provider>,
-        document.body,
-      )
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
       expect(Child).toHaveBeenCalledWith({ a: 'b', store, children: NO_CHILDREN }, expect.anything())
       expect(store.subscribe).toBeCalled()
     })
 
     it('should transform string selector', () => {
-      let state = { a: 'b', b: 'c', c: 'd' }
+      const state = { a: 'b', b: 'c', c: 'd' }
       const store = { subscribe: jest.fn(), unsubscribe: jest.fn(), getState: () => state }
       const Child = jest.fn()
       const ConnectedChild = connect('a, b')(Child)
-      render(
-        <Provider store={store}>
-          <ConnectedChild />
-        </Provider>,
-        document.body,
-      )
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
       expect(Child).toHaveBeenCalledWith({ a: 'b', b: 'c', store, children: NO_CHILDREN }, expect.anything())
       expect(store.subscribe).toBeCalled()
     })
@@ -76,12 +61,7 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       jest.spyOn(store, 'subscribe')
       const ConnectedChild = connect(Object)(() => null)
 
-      render(
-        <Provider store={store}>
-          <ConnectedChild />
-        </Provider>,
-        document.body,
-      )
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
 
       expect(store.subscribe).toBeCalledWith(expect.any(Function))
     })
@@ -90,14 +70,9 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       const store = createStore()
       jest.spyOn(store, 'unsubscribe')
       const ConnectedChild = connect(Object)(() => null)
-      render(
-        <Provider store={store}>
-          <ConnectedChild />
-        </Provider>,
-        document.body,
-      )
-      await sleep(1)
-      render(null, document.body)
+      const { unmount } = render(h(Provider, { store }, h(ConnectedChild)), document.body)
+      // TODO check why unmount is needed, ie why doesnt it work calling render(null, document.body)
+      unmount()
       expect(store.unsubscribe).toBeCalled()
     })
 
@@ -108,34 +83,30 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       jest.spyOn(store, 'unsubscribe')
       const ConnectedChild = connect(Object)(Child)
 
-      render(
-        <Provider store={store}>
-          <ConnectedChild />
-        </Provider>,
-        document.body,
-      )
+      const { unmount } = render(h(Provider, { store }, h(ConnectedChild)), document.body)
 
       expect(store.subscribe).toBeCalledWith(expect.any(Function))
       expect(Child).toHaveBeenCalledWith({ store, children: NO_CHILDREN }, expect.anything())
 
       Child.mockClear()
 
-      store.setState({ a: 'b' })
-      await sleep(1)
+      act(() => store.setState({ a: 'b' }))
+
       expect(Child).toHaveBeenCalledWith({ a: 'b', store, children: NO_CHILDREN }, expect.anything())
 
-      render(null, document.body)
+      unmount()
+
       expect(store.unsubscribe).toBeCalled()
 
       Child.mockClear()
 
-      store.setState({ c: 'd' })
-      await sleep(1)
+      act(() => store.setState({ c: 'd' }))
+
       expect(Child).not.toHaveBeenCalled()
     })
 
     it('should run mapStateToProps and update when outer props change', async () => {
-      let state = {}
+      const state = {}
       const store = { subscribe: jest.fn(), unsubscribe: () => {}, getState: () => state }
       const Child = jest.fn().mockName('<Child>').mockReturnValue(42)
       let mappings = 0
@@ -147,12 +118,7 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       }))
 
       const ConnectedChild = connect(mapStateToProps)(Child)
-      render(
-        <Provider store={store}>
-          <ConnectedChild />
-        </Provider>,
-        document.body,
-      )
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
 
       expect(mapStateToProps).toHaveBeenCalledTimes(1)
       expect(mapStateToProps).toHaveBeenCalledWith({}, { children: NO_CHILDREN })
@@ -162,12 +128,7 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       mapStateToProps.mockClear()
       Child.mockClear()
 
-      render(
-        <Provider store={store}>
-          <ConnectedChild a='b' />
-        </Provider>,
-        document.body,
-      )
+      render(h(Provider, { store }, h(ConnectedChild, { a: 'b' })), document.body)
 
       expect(mapStateToProps).toHaveBeenCalledTimes(1)
       expect(mapStateToProps).toHaveBeenCalledWith({}, { a: 'b', children: NO_CHILDREN })
@@ -177,12 +138,7 @@ describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
       mapStateToProps.mockClear()
       Child.mockClear()
 
-      render(
-        <Provider store={store}>
-          <ConnectedChild a='b' />
-        </Provider>,
-        document.body,
-      )
+      render(h(Provider, { store }, h(ConnectedChild, { a: 'b' })), document.body)
 
       expect(mapStateToProps).toHaveBeenCalledTimes(1)
       expect(mapStateToProps).toHaveBeenCalledWith({}, { a: 'b', children: NO_CHILDREN })

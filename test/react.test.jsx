@@ -1,172 +1,150 @@
-import 'raf/polyfill'
-import React, { Component } from 'react'
-import TestUtils from 'react-dom/test-utils'
-import PropTypes from 'prop-types'
-
+import { jest } from '@jest/globals'
+import { createElement as h } from 'react'
+import { act, render } from '@testing-library/react'
 import createStore from '../src/index.js'
-import { Provider, connect } from '../src/react.js'
+import { Provider, connect, useStore } from '../src/react.js'
 
-import { mount, configure } from 'enzyme'
-import Adapter from 'enzyme-adapter-react-16'
-configure({ adapter: new Adapter() })
+const NO_CHILDREN = undefined
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-describe('integrations/react', () => {
-  const createChild = (storeKey = 'store') => {
-    class Child extends Component {
-      render() {
-        return <div />
-      }
-    }
-
-    Child.contextTypes = {
-      [storeKey]: PropTypes.object.isRequired,
-    }
-
-    return Child
-  }
-  const Child = createChild()
-
-  it('should provide props into context', () => {
-    const store = createStore(() => ({}))
-
-    const spy = jest.spyOn(console, 'error')
-    const tree = TestUtils.renderIntoDocument(
-      <Provider store={store}>
-        <Child />
-      </Provider>,
-    )
-    expect(spy).not.toHaveBeenCalled()
-
-    const child = TestUtils.findRenderedComponentWithType(tree, Child)
-    expect(child.context.store).toBe(store)
-  })
-
-  it('should pass mapped state as props', () => {
-    let state = { a: 'b' }
-    const store = { subscribe: jest.fn(), getState: () => state }
-    const ConnectedChild = connect(Object)(Child)
-
-    const mountedProvider = mount(
-      <Provider store={store}>
-        <ConnectedChild />
-      </Provider>,
-    )
-
-    const child = mountedProvider.find(Child).first()
-    expect(child.props()).toEqual({
-      a: 'b',
-      store,
+describe(`integrations/preact${global.IS_PREACT_8 ? '-8' : ''}`, () => {
+  describe('<Provider>', () => {
+    afterEach(() => {
+      render(null, document.body)
     })
-    expect(store.subscribe).toBeCalled()
-  })
 
-  it('should transform string selector', () => {
-    let state = { a: 'b', b: 'c', c: 'd' }
-    const store = { subscribe: jest.fn(), getState: () => state }
-    const ConnectedChild = connect('a, b')(Child)
-    const mountedProvider = mount(
-      <Provider store={store}>
-        <ConnectedChild />
-      </Provider>,
-    )
+    it('should provide the store in context', () => {
+      let context
 
-    const child = mountedProvider.find(Child).first()
-    expect(child.props()).toEqual({
-      a: 'b',
-      b: 'c',
-      store,
+      const Child = () => {
+        context = useStore()
+        return null
+      }
+
+      render(h(Provider, { store: 'a' }, h(Child)), document.body)
+      expect(context).toBe('a')
+
+      render(null, document.body)
+
+      const store = { name: 'obj' }
+      render(h(Provider, { store }, h(Child)), document.body)
+      expect(context).toBe(store)
     })
-    expect(store.subscribe).toBeCalled()
   })
 
-  it('should subscribe to store', async () => {
-    const store = createStore()
-    jest.spyOn(store, 'subscribe')
-    jest.spyOn(store, 'unsubscribe')
+  describe('connect()', () => {
+    afterEach(() => {
+      render(null, document.body)
+    })
 
-    const ConnectedChild = connect(Object)(Child)
+    it('should pass mapped state as props', () => {
+      const state = { a: 'b' }
+      const store = { subscribe: jest.fn(), unsubscribe: jest.fn(), getState: () => state }
+      const Child = jest.fn()
+      const ConnectedChild = connect(Object)(Child)
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
+      expect(Child).toHaveBeenCalledWith({ a: 'b', store, children: NO_CHILDREN }, expect.anything())
+      expect(store.subscribe).toBeCalled()
+    })
 
-    expect(store.subscribe).not.toHaveBeenCalled()
-    const mountedProvider = mount(
-      <Provider store={store}>
-        <ConnectedChild />
-      </Provider>,
-    )
+    it('should transform string selector', () => {
+      const state = { a: 'b', b: 'c', c: 'd' }
+      const store = { subscribe: jest.fn(), unsubscribe: jest.fn(), getState: () => state }
+      const Child = jest.fn()
+      const ConnectedChild = connect('a, b')(Child)
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
+      expect(Child).toHaveBeenCalledWith({ a: 'b', b: 'c', store, children: NO_CHILDREN }, expect.anything())
+      expect(store.subscribe).toBeCalled()
+    })
 
-    expect(store.subscribe).toBeCalledWith(expect.any(Function))
+    it('should subscribe to store on mount', async () => {
+      const store = { subscribe: jest.fn(), unsubscribe: jest.fn(), getState: () => ({}) }
+      jest.spyOn(store, 'subscribe')
+      const ConnectedChild = connect(Object)(() => null)
 
-    let child = mountedProvider.find('Child').first().instance()
-    expect(child.props).toEqual({ store })
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
 
-    store.setState({ a: 'b' })
-    await sleep(1)
+      expect(store.subscribe).toBeCalledWith(expect.any(Function))
+    })
 
-    child = mountedProvider.find('Child').first().instance()
-    expect(child.props).toEqual({ a: 'b', store })
+    it('should unsubscribe from store when unmounted', async () => {
+      const store = createStore()
+      jest.spyOn(store, 'unsubscribe')
+      const ConnectedChild = connect(Object)(() => null)
+      const { unmount } = render(h(Provider, { store }, h(ConnectedChild)), document.body)
+      // TODO check why unmount is needed, ie why doesnt it work calling render(null, document.body)
+      unmount()
+      expect(store.unsubscribe).toBeCalled()
+    })
 
-    expect(store.unsubscribe).not.toHaveBeenCalled()
-    mountedProvider.unmount()
-    expect(store.unsubscribe).toBeCalled()
-  })
+    it('should subscribe to store', async () => {
+      const store = createStore()
+      const Child = jest.fn()
+      jest.spyOn(store, 'subscribe')
+      jest.spyOn(store, 'unsubscribe')
+      const ConnectedChild = connect(Object)(Child)
 
-  it('should run mapStateToProps and update when outer props change', async () => {
-    let state = {}
-    const store = { subscribe: jest.fn(), getState: () => state }
-    const Child = jest.fn(() => null).mockName('<Child>')
-    let mappings = 0
+      const { unmount } = render(h(Provider, { store }, h(ConnectedChild)), document.body)
 
-    // Jest mock return values are broken :(
-    const mapStateToProps = jest.fn((state, props) => ({ mappings: ++mappings, ...props }))
+      expect(store.subscribe).toBeCalledWith(expect.any(Function))
+      expect(Child).toHaveBeenCalledWith({ store, children: NO_CHILDREN }, expect.anything())
 
-    let root
-    class Outer extends Component {
-      constructor() {
-        super()
-        this.state = {}
-        root = this
-        root.setProps = (props) => this.setState({ props })
-      }
-      render() {
-        root = this
-        return (
-          <Provider store={store}>
-            <ConnectedChild {...(this.state.props || this.props)} />
-          </Provider>
-        )
-      }
-    }
+      Child.mockClear()
 
-    const ConnectedChild = connect(mapStateToProps)(Child)
-    const mountedProvider = mount(<Outer />)
+      act(() => store.setState({ a: 'b' }))
 
-    expect(mapStateToProps).toHaveBeenCalledTimes(1)
-    expect(mapStateToProps).toHaveBeenCalledWith({}, {})
-    // first render calls mapStateToProps
-    expect(Child).toHaveBeenCalledWith({ mappings: 1, store }, expect.anything())
+      expect(Child).toHaveBeenCalledWith({ a: 'b', store, children: NO_CHILDREN }, expect.anything())
 
-    mapStateToProps.mockClear()
-    Child.mockClear()
+      unmount()
 
-    // root.setState({ a: 'b' });
-    mountedProvider.setProps({ a: 'b' })
+      expect(store.unsubscribe).toBeCalled()
 
-    // await sleep(100);
+      Child.mockClear()
 
-    expect(mapStateToProps).toHaveBeenCalledTimes(1)
-    expect(mapStateToProps).toHaveBeenCalledWith({}, { a: 'b' })
-    // outer props were changed
-    expect(Child).toHaveBeenCalledWith({ mappings: 2, a: 'b', store }, expect.anything())
+      act(() => store.setState({ c: 'd' }))
 
-    mapStateToProps.mockClear()
-    Child.mockClear()
+      expect(Child).not.toHaveBeenCalled()
+    })
 
-    mountedProvider.setProps({})
+    it('should run mapStateToProps and update when outer props change', async () => {
+      const state = {}
+      const store = { subscribe: jest.fn(), unsubscribe: () => {}, getState: () => state }
+      const Child = jest.fn().mockName('<Child>').mockReturnValue(42)
+      let mappings = 0
 
-    await sleep(1)
+      // Jest mock return values are broken :(
+      const mapStateToProps = jest.fn((state, props) => ({
+        mappings: ++mappings,
+        ...props,
+      }))
 
-    // re-rendered, but outer props were not changed
-    expect(Child).toHaveBeenCalledWith({ mappings: 3, a: 'b', store }, expect.anything())
+      const ConnectedChild = connect(mapStateToProps)(Child)
+      render(h(Provider, { store }, h(ConnectedChild)), document.body)
+
+      expect(mapStateToProps).toHaveBeenCalledTimes(1)
+      expect(mapStateToProps).toHaveBeenCalledWith({}, { children: NO_CHILDREN })
+      // first render calls mapStateToProps
+      expect(Child).toHaveBeenCalledWith({ mappings: 1, store, children: NO_CHILDREN }, expect.anything())
+
+      mapStateToProps.mockClear()
+      Child.mockClear()
+
+      render(h(Provider, { store }, h(ConnectedChild, { a: 'b' })), document.body)
+
+      expect(mapStateToProps).toHaveBeenCalledTimes(1)
+      expect(mapStateToProps).toHaveBeenCalledWith({}, { a: 'b', children: NO_CHILDREN })
+      // outer props were changed
+      expect(Child).toHaveBeenCalledWith({ mappings: 2, a: 'b', store, children: NO_CHILDREN }, expect.anything())
+
+      mapStateToProps.mockClear()
+      Child.mockClear()
+
+      render(h(Provider, { store }, h(ConnectedChild, { a: 'b' })), document.body)
+
+      expect(mapStateToProps).toHaveBeenCalledTimes(1)
+      expect(mapStateToProps).toHaveBeenCalledWith({}, { a: 'b', children: NO_CHILDREN })
+
+      // re-rendered, but outer props were not changed
+      expect(Child).toHaveBeenCalledWith({ mappings: 3, a: 'b', store, children: NO_CHILDREN }, expect.anything())
+    })
   })
 })

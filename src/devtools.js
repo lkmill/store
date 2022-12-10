@@ -18,11 +18,14 @@ export default function storeDevTools(store) {
       }
     })
     store.devtools.init(store.getState())
-    store.subscribe(function (state, action) {
-      const actionName = (action && action.name) || 'setState'
+    store.subscribe(function (state, action, update) {
+      update = update || {}
+      const actionName = action
+        ? action.type || action.name || 'N/A (' + (Object.keys(update).join(', ') || 'none') + ')'
+        : 'setState (' + (Object.keys(update).join(', ') || 'none') + ')'
 
       if (!ignoreState) {
-        store.devtools.send(actionName, state)
+        store.devtools.send({ type: actionName, update }, state)
       } else {
         ignoreState = false
       }

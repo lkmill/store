@@ -1,8 +1,9 @@
-import createStore from '../src'
+import { jest } from '@jest/globals'
+import createStore from '../src/index.js'
 
 describe('createStore()', () => {
   it('should be instantiable', () => {
-    let store = createStore()
+    const store = createStore()
     expect(store).toMatchObject({
       setState: expect.any(Function),
       getState: expect.any(Function),
@@ -12,7 +13,7 @@ describe('createStore()', () => {
   })
 
   it('should update state in-place', () => {
-    let store = createStore()
+    const store = createStore()
     expect(store.getState()).toMatchObject({})
     store.setState({ a: 'b' })
     expect(store.getState()).toMatchObject({ a: 'b' })
@@ -27,36 +28,38 @@ describe('createStore()', () => {
   })
 
   it('should invoke subscriptions', () => {
-    let store = createStore()
+    const store = createStore()
 
-    let sub1 = jest.fn()
-    let sub2 = jest.fn()
+    const sub1 = jest.fn()
+    const sub2 = jest.fn()
     let action
 
-    let rval = store.subscribe(sub1)
+    const rval = store.subscribe(sub1)
     expect(rval).toBeInstanceOf(Function)
 
-    store.setState({ a: 'b' })
-    expect(sub1).toBeCalledWith(store.getState(), action)
+    const update1 = { a: 'b' }
+    store.setState(update1)
+    expect(sub1).toBeCalledWith(store.getState(), action, update1)
 
     store.subscribe(sub2)
-    store.setState({ c: 'd' })
+    const update2 = { c: 'd' }
+    store.setState(update2)
 
     expect(sub1).toHaveBeenCalledTimes(2)
-    expect(sub1).toHaveBeenLastCalledWith(store.getState(), action)
-    expect(sub2).toBeCalledWith(store.getState(), action)
+    expect(sub1).toHaveBeenLastCalledWith(store.getState(), action, update2)
+    expect(sub2).toBeCalledWith(store.getState(), action, update2)
   })
 
   it('should unsubscribe', () => {
-    let store = createStore()
+    const store = createStore()
 
-    let sub1 = jest.fn()
-    let sub2 = jest.fn()
-    let sub3 = jest.fn()
+    const sub1 = jest.fn()
+    const sub2 = jest.fn()
+    const sub3 = jest.fn()
 
     store.subscribe(sub1)
     store.subscribe(sub2)
-    let unsub3 = store.subscribe(sub3)
+    const unsub3 = store.subscribe(sub3)
 
     store.setState({ a: 'b' })
     expect(sub1).toBeCalled()

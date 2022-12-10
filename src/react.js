@@ -1,78 +1,68 @@
-import { createElement, Children, Component } from 'react'
-import { assign, mapActions, select } from '../util'
+import { createElement, createContext, useContext, useState, useEffect, useMemo } from 'react'
+import { assign, wrapActions, select } from './util.js'
 
-const CONTEXT_TYPES = {
-  store: () => {},
-}
+const Context = createContext()
 
-/** Wire a component up to the store. Passes state as props, re-renders on change.
- *  @param {Function|Array|String} mapStateToProps  A function mapping of store state to prop values, or an array/CSV of properties to map.
- *  @param {Function|Object} [actions] 				Action functions (pure state mappings), or a factory returning them. Every action function gets current state as the first parameter and any other params next
- *  @returns {Component} ConnectedComponent
- *  @example
- *    const Foo = connect('foo,bar')( ({ foo, bar }) => <div /> )
- *  @example
- *    const actions = { someAction }
- *    const Foo = connect('foo,bar', actions)( ({ foo, bar, someAction }) => <div /> )
- *  @example
- *    @connect( state => ({ foo: state.foo, bar: state.bar }) )
- *    export class Foo { render({ foo, bar }) { } }
+export const useStore = () => useContext(Context)
+
+/**
+ * Wire a component up to the store. Passes state as props, re-renders on change.
+ *
+ * @param {Function|Array|String} mapStateToProps  A function mapping of store state to prop values, or an array/CSV of properties to map.
+ * @param {Function|Object} [actions] 				Action functions (pure state mappings), or a factory returning them. Every action function gets current state as the first parameter and any other params next
+ * @returns {Component} ConnectedComponent
+ * @example
+ * const Foo = connect('foo,bar')( ({ foo, bar }) => <div /> )
+ * @example
+ * const actions = { someAction }
+ * const Foo = connect('foo,bar', actions)( ({ foo, bar, someAction }) => <div /> )
+ * @example
+ * @connect( state => ({ foo: state.foo, bar: state.bar }) )
+ * export class Foo { render({ foo, bar }) { } }
  */
 export function connect(mapStateToProps, actions) {
   if (typeof mapStateToProps !== 'function') {
     mapStateToProps = select(mapStateToProps || [])
   }
-  return (Child) => {
-    function Wrapper(props, context) {
-      Component.call(this, props, context)
-      const store = context.store
-      let state = mapStateToProps(store ? store.getState() : {}, props)
-      const boundActions = actions ? mapActions(actions, store) : { store }
-      const update = () => {
-        const mapped = mapStateToProps(store ? store.getState() : {}, props)
-        for (const i in mapped)
-          if (mapped[i] !== state[i]) {
-            state = mapped
-            return this.forceUpdate()
+
+  return (Child) =>
+    function Wrapper(props) {
+      const store = useContext(Context)
+      const [state, setState] = useState(() => mapStateToProps(store ? store.getState() : {}, props))
+      const wrappedActions = useMemo(() => (actions ? wrapActions(actions, store) : { store }), [store])
+
+      useEffect(() => {
+        const update = () => {
+          const mapped = mapStateToProps(store ? store.getState() : {}, props)
+
+          for (const i in mapped) {
+            if (mapped[i] !== state[i]) {
+              return setState(mapped)
+            }
           }
-        for (const i in state)
-          if (!(i in mapped)) {
-            state = mapped
-            return this.forceUpdate()
+
+          for (const i in state) {
+            if (!(i in mapped)) {
+              return setState(mapped)
+            }
           }
-      }
-      this.UNSAFE_componentWillReceiveProps = (p) => {
-        props = p
-        update()
-      }
-      this.componentDidMount = () => {
-        store.subscribe(update)
-      }
-      this.componentWillUnmount = () => {
-        store.unsubscribe(update)
-      }
-      this.render = () => createElement(Child, assign(assign(assign({}, boundActions), this.props), state))
+        }
+
+        return store.subscribe(update)
+      }, [store])
+
+      return createElement(Child, assign(assign(assign({}, wrappedActions), props), state))
     }
-    Wrapper.contextTypes = CONTEXT_TYPES
-    return ((Wrapper.prototype = Object.create(Component.prototype)).constructor = Wrapper)
-  }
 }
 
-/** Provider exposes a store (passed as `props.store`) into context.
+/**
+ * Provider exposes a store (passed as `props.store`) into context.
  *
- *  Generally, an entire application is wrapped in a single `<Provider>` at the root.
- *  @class
- *  @extends Component
- *  @param {Object} props
- *  @param {Store} props.store		A {Store} instance to expose via context.
+ * Generally, an entire application is wrapped in a single `<Provider>` at the root.
+ *
+ * @param {Object} props
+ * @param {Store} props.store		A {Store} instance to expose via context.
  */
-export class Provider extends Component {
-  getChildContext() {
-    return { store: this.props.store }
-  }
-
-  render() {
-    return Children.only(this.props.children)
-  }
+export function Provider(props) {
+  return createElement(Context.Provider, { value: props.store }, props.children)
 }
-Provider.childContextTypes = CONTEXT_TYPES
