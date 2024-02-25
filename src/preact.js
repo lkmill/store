@@ -2,7 +2,43 @@ import { h, createContext } from 'preact'
 import { useContext, useState, useEffect, useMemo } from 'preact/hooks'
 import { assign, wrapActions, select } from './util.js'
 
+const shallowEqual = (properties) => (currentSelected, newSelected) =>
+  properties.every((property) => currentSelected[property] === newSelected[property])
+
 const Context = createContext()
+
+export const useDispatch = () => useContext(Context).dispatch
+
+export const useSelector = (inSelector, inComparator) => {
+  const [selector, comparator] = useMemo(() => {
+    if (typeof inSelector === 'string') {
+      // TODO check if there is any performance for "sparse array" if `inComparator` is undefined
+      return [(state) => state[inSelector], inComparator]
+    } else if (Array.isArray(inSelector)) {
+      return [select(inSelector), inComparator || shallowEqual(inSelector)]
+    } else {
+      return [inSelector, inComparator]
+    }
+  }, [])
+
+  const store = useContext(Context)
+
+  const [selected, setSelected] = useState(() => selector(store.getState()))
+
+  useEffect(
+    () =>
+      store.subscribe((state) =>
+        setSelected((currentSelected) => {
+          const newSelected = selector(state)
+
+          return comparator && comparator(currentSelected, newSelected) ? currentSelected : newSelected
+        }),
+      ),
+    [],
+  )
+
+  return selected
+}
 
 export const useStore = () => useContext(Context)
 
